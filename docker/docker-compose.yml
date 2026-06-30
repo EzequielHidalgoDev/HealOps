@@ -1,0 +1,86 @@
+services:
+
+  mysql:
+    image: mysql:8.0                  # imagen oficial MySQL
+    container_name: healops-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass   # contraseña del superusuario
+      MYSQL_DATABASE: zabbix          # base de datos que Zabbix usará
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbixpass
+    volumes:
+      - mysql_data:/var/lib/mysql     # persiste los datos aunque el contenedor se reinicie
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql  # se ejecuta solo la primera vez que se crea el contenedor
+    networks:
+      - healops-net
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql:alpine-7.0-latest
+    container_name: healops-zabbix-server
+    environment:
+      DB_SERVER_HOST: mysql           # nombre del contenedor MySQL, no una IP
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbixpass
+    ports:
+      - "10051:10051"                 # puerto que usan los agentes Zabbix para enviar datos
+    depends_on:
+      - mysql                         # espera a que MySQL arranque primero
+    networks:
+      - healops-net
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql:alpine-7.0-latest
+    container_name: healops-zabbix-web
+    environment:
+      DB_SERVER_HOST: mysql
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbixpass
+      ZBX_SERVER_HOST: zabbix-server  # le dice al frontend dónde está el servidor
+      PHP_TZ: Europe/Madrid
+    ports:
+      - "8080:8080"                   # accederás a la UI de Zabbix en localhost:8080
+    depends_on:
+      - zabbix-server
+    networks:
+      - healops-net
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent:alpine-7.0-latest
+    container_name: healops-servidor-simulado
+    environment:
+      ZBX_SERVER_HOST: zabbix-server    # a quién reporta las métricas
+      ZBX_HOSTNAME: servidor-simulado   # nombre que verás en el dashboard de Zabbix
+    ports:
+      - "10050:10050"                   # puerto por donde Zabbix Server consulta al agente
+    volumes:
+      - /:/rootfs:ro                    # monta el sistema de archivos raíz del host en modo lectura
+      - /proc:/host/proc:ro             # métricas de procesos del host real
+      - /sys:/host/sys:ro               # métricas del kernel del host real
+    privileged: true                    # necesario para que el agente lea métricas del host
+    depends_on:
+      - zabbix-server
+    networks:
+      - healops-net
+
+  glpi:
+    image: diouxx/glpi                # imagen no oficial pero la más usada para GLPI
+    container_name: healops-glpi
+    environment:
+      MARIADB_HOST: mysql
+      MARIADB_PORT: 3306              # puerto estándar de MySQL
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: zabbix
+      MARIADB_PASSWORD: zabbixpass
+    ports:
+      - "8081:80"                     # accederás a GLPI en localhost:8081
+    depends_on:
+      - mysql
+    networks:
+      - healops-net
+  
+volumes:
+  mysql_data:                         # volumen gestionado por Docker
+
+networks:
+  healops-net:                        # red interna compartida entre contenedores
