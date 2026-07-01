@@ -20,7 +20,7 @@ else:
     sys.path.append(_BASE)
 
 load_dotenv(os.path.join(_BASE, ".env"))
-from monitor.analizador_alertas import login, obtener_alertas, analizar_alertas, ejecutar_correccion
+from monitor.analizador_alertas import login, obtener_alertas, analizar_alertas, ejecutar_correccion, ACCIONES, CONTENEDORES
 from gestor_tickets.cliente_glpi import (login as glpi_login, obtener_tickets_abiertos,
                                           cerrar_tickets_resueltos, logout)
 from panel.tema import *
@@ -84,6 +84,77 @@ def _ghost_btn(parent, text, command, width=130, height=36):
                          width=width, height=height,
                          border_width=1, border_color=BORDER,
                          command=command)
+
+
+# ── Ventana de corrección ─────────────────────────────────────────────────────
+
+class VentanaCorreccion(ctk.CTkToplevel):
+    def __init__(self, master, host, nombre_alerta):
+        super().__init__(master)
+        self.title(f"Corregir — {host}")
+        self.geometry("700x520")
+        self.resizable(False, False)
+        self.configure(fg_color=BG_PAGE)
+        self.grab_set()
+
+        comando = next((v for k, v in ACCIONES.items() if k in nombre_alerta.lower()), None)
+        contenedor = CONTENEDORES.get(host, host)
+
+        _label(self, nombre_alerta, font=FONT_TITLE).pack(anchor="w", padx=24, pady=(24, 2))
+        _label(self, f"Host: {host}", font=FONT_MUTED, color=TEXT_SUB).pack(anchor="w", padx=24)
+
+        _label(self, "ACCIÓN A EJECUTAR", font=FONT_LABEL,
+               color=TEXT_LIGHT).pack(anchor="w", padx=24, pady=(20, 6))
+        cmd_frame = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=8)
+        cmd_frame.pack(fill="x", padx=24)
+        ctk.CTkLabel(cmd_frame,
+                     text=f"docker exec {contenedor} sh -c \"{comando}\"",
+                     font=FONT_MONO, text_color="#D4D4D4",
+                     wraplength=630, justify="left").pack(padx=14, pady=10, anchor="w")
+
+        _label(self, "OUTPUT", font=FONT_LABEL,
+               color=TEXT_LIGHT).pack(anchor="w", padx=24, pady=(16, 6))
+        self.output = ctk.CTkTextbox(self, font=FONT_MONO, fg_color="#1E1E1E",
+                                     text_color="#D4D4D4", corner_radius=8,
+                                     state="disabled")
+        self.output.pack(fill="both", expand=True, padx=24, pady=(0, 16))
+
+        btns = ctk.CTkFrame(self, fg_color=BG_PAGE, corner_radius=0)
+        btns.pack(fill="x", padx=24, pady=(0, 24))
+        self.btn_run = _pill_btn(btns, "Ejecutar corrección",
+                                 command=lambda: self._ejecutar(host, nombre_alerta))
+        self.btn_run.pack(side="left")
+        _ghost_btn(btns, "Cerrar", command=self.destroy).pack(side="left", padx=(10, 0))
+
+    def _ejecutar(self, host, nombre_alerta):
+        self.btn_run.configure(text="Ejecutando…", state="disabled", fg_color=TEXT_LIGHT)
+        self._append("Iniciando corrección...\n")
+
+        def run():
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    ok = ejecutar_correccion(host, nombre_alerta)
+                salida = buf.getvalue().strip()
+                if salida:
+                    self.after(0, lambda s=salida: self._append(s + "\n"))
+                if ok:
+                    self.after(0, lambda: self._append("\nCorrecion exitosa.\n"))
+                else:
+                    self.after(0, lambda: self._append("\nFallo — ticket creado en GLPI.\n"))
+            except Exception as e:
+                self.after(0, lambda: self._append(f"\nError: {e}\n"))
+            finally:
+                self.after(0, lambda: self.btn_run.configure(
+                    text="Ejecutar corrección", state="normal", fg_color=ACCENT))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _append(self, text):
+        self.output.configure(state="normal")
+        self.output.insert("end", text)
+        self.output.see("end")
+        self.output.configure(state="disabled")
 
 
 # ── Ventana de logs ───────────────────────────────────────────────────────────
@@ -397,8 +468,10 @@ class HealOpsPanel(ctk.CTk):
         c_alertas = _card(self.detail)
         c_alertas.pack(fill="x", pady=(0, 12))
         self._seccion(c_alertas, "Alertas activas")
-        self.detail_tabla_alertas = self._tabla(
-            c_alertas, ("Alerta", "Severidad"), (540, 100), height=4)
+        self.frame_alertas = ctk.CTkScrollableFrame(
+            c_alertas, fg_color=BG_CARD, corner_radius=0, height=150,
+            scrollbar_button_color=BORDER, scrollbar_button_hover_color=TEXT_LIGHT)
+        self.frame_alertas.pack(fill="x", padx=16, pady=(8, 16))
 
         # Fila 2: Tickets + Corrector
         fila2 = ctk.CTkFrame(self.detail, fg_color=BG_PAGE, corner_radius=0)
@@ -417,6 +490,29 @@ class HealOpsPanel(ctk.CTk):
         self.detail_tabla_corrector = self._tabla(
             c_corrector, ("Hora", "Estado", "Alerta"), (60, 75, 200), height=4)
         self._añadir_tooltip(self.detail_tabla_corrector)
+
+    def _fila_alerta(self, host, alerta):
+        nombre_alerta = alerta.get("nombre", "")
+        sev = {"4": "High", "5": "Critical"}.get(str(alerta.get("severity", "")), "—")
+        tiene_accion = any(k in nombre_alerta.lower() for k in ACCIONES)
+        sev_color = ACCENT if sev == "Critical" else WARNING
+
+        fila = ctk.CTkFrame(self.frame_alertas, fg_color="#F9F9F9", corner_radius=8)
+        fila.pack(fill="x", pady=3)
+
+        ctk.CTkLabel(fila, text=sev, font=FONT_LABEL, fg_color=sev_color,
+                     text_color="white", corner_radius=6, width=64, height=26).pack(
+            side="left", padx=(10, 12), pady=10)
+
+        _label(fila, nombre_alerta, font=FONT_BODY).pack(side="left", expand=True, anchor="w")
+
+        if tiene_accion:
+            _pill_btn(fila, "Corregir", width=110, height=30,
+                      command=lambda h=host, a=nombre_alerta: VentanaCorreccion(self, h, a)
+                      ).pack(side="right", padx=10, pady=8)
+        else:
+            _label(fila, "Sin corrección", color=TEXT_LIGHT,
+                   font=FONT_MUTED).pack(side="right", padx=10)
 
     def _seccion(self, parent, texto):
         ctk.CTkLabel(parent, text=texto.upper(), font=FONT_LABEL,
@@ -499,12 +595,15 @@ class HealOpsPanel(ctk.CTk):
             return
         nombre = self._host_seleccionado
 
-        self._limpiar(self.detail_tabla_alertas)
-        SEV = {"4": "High", "5": "Critical"}
-        for alerta in self._alertas_por_host.get(nombre, []):
-            sev = SEV.get(str(alerta.get("severity", "")), "—")
-            self.detail_tabla_alertas.insert("", "end",
-                values=(alerta.get("nombre", ""), sev))
+        for w in self.frame_alertas.winfo_children():
+            w.destroy()
+        alertas_host = self._alertas_por_host.get(nombre, [])
+        if not alertas_host:
+            _label(self.frame_alertas, "Sin alertas activas",
+                   color=TEXT_LIGHT).pack(pady=20)
+        else:
+            for alerta in alertas_host:
+                self._fila_alerta(nombre, alerta)
 
         ESTADOS = {1: "Nuevo", 2: "En curso", 3: "En espera", 4: "Resuelto", 5: "Cerrado"}
         self._limpiar(self.detail_tabla_tickets)
