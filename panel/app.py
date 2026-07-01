@@ -12,10 +12,14 @@ import requests
 from datetime import datetime
 from dotenv import load_dotenv
 
-_ENV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
-load_dotenv(_ENV)
+if hasattr(sys, '_MEIPASS'):
+    _BASE = os.path.dirname(sys.executable)
+    sys.path.insert(0, sys._MEIPASS)
+else:
+    _BASE = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    sys.path.append(_BASE)
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+load_dotenv(os.path.join(_BASE, ".env"))
 from monitor.analizador_alertas import login, obtener_alertas, analizar_alertas, ejecutar_correccion
 from gestor_tickets.cliente_glpi import (login as glpi_login, obtener_tickets_abiertos,
                                           cerrar_tickets_resueltos, logout)
@@ -24,10 +28,14 @@ from panel.tema import *
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
+def _resource(rel):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, rel)
+    return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", rel))
+
 REFRESCO   = 30
 ZABBIX_URL = os.getenv("ZABBIX_URL", "http://localhost:8080/api_jsonrpc.php")
-ICON_PATH  = os.path.abspath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "img", "HealOps Icon.png"))
+ICON_PATH  = _resource(os.path.join("img", "HealOps Icon.png"))
 
 LOGS = {
     "Alertas reales": "logs/alertas_reales.log",

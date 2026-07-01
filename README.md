@@ -214,6 +214,44 @@ En local, la corrección se ejecuta con `docker exec`. En producción, los scrip
 
 ---
 
+## Despliegue en servidor real
+
+La infraestructura está diseñada para desplegarse en un VPS (DigitalOcean, Hetzner, AWS...) y ser accesible desde cualquier máquina de la red.
+
+**1. Instalar Docker en el servidor**
+```bash
+ssh root@IP_DEL_SERVIDOR
+curl -fsSL https://get.docker.com | sh
+```
+
+**2. Subir el proyecto**
+```bash
+# Desde tu máquina local
+scp -r docker/ root@IP_DEL_SERVIDOR:/opt/healops/
+scp .env root@IP_DEL_SERVIDOR:/opt/healops/
+```
+O hacer `git clone` directamente en el servidor.
+
+**3. Levantar los contenedores**
+```bash
+cd /opt/healops
+docker compose -f docker/docker-compose.yml up -d
+```
+
+**4. Abrir puertos en el firewall del VPS**
+- 8080 → Zabbix
+- 8081 → GLPI
+
+**5. Configurar el `.env` en cada cliente**
+```env
+ZABBIX_URL=http://IP_DEL_SERVIDOR:8080/api_jsonrpc.php
+GLPI_URL=http://IP_DEL_SERVIDOR:8081/apirest.php
+```
+
+Con esto, el `HealOps.exe` funciona en cualquier máquina que tenga el `.env` apuntando al servidor. No hace falta instalar Python ni Docker en los clientes.
+
+---
+
 ## Autor
 
 **Ezequiel Hidalgo** — [GitHub](https://github.com/EzequielHidalgoDev)
