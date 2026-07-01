@@ -48,7 +48,10 @@ LOGS = {
 def obtener_hosts(token):
     return requests.post(ZABBIX_URL, json={
         "jsonrpc": "2.0", "method": "host.get",
-        "params": {"output": ["hostid", "host", "status"]},
+        "params": {
+            "output": ["hostid", "host", "status"],
+            "selectInterfaces": ["ip", "port"]
+        },
         "id": 5
     }, headers={"Authorization": f"Bearer {token}"}).json().get("result", [])
 
@@ -359,6 +362,7 @@ class HealOpsPanel(ctk.CTk):
             print(f"[Panel] Icono: {e}")
         self._tarjetas_host    = {}
         self._alertas_por_host = {}
+        self._interfaces_host  = {}
         self._host_seleccionado = None
         self._ultimo_token      = None
         self._estilo_tabla()
@@ -463,6 +467,11 @@ class HealOpsPanel(ctk.CTk):
         cab = ctk.CTkFrame(self.detail, fg_color=BG_PAGE, corner_radius=0)
         cab.pack(fill="x", pady=(0, 16))
         _label(cab, nombre, font=FONT_HERO).pack(side="left")
+        iface = self._interfaces_host.get(nombre, {})
+        if iface:
+            ip_txt = f"{iface['ip']}:{iface['port']}"
+            ctk.CTkLabel(cab, text=ip_txt, font=FONT_MONO,
+                         text_color=TEXT_LIGHT).pack(side="left", padx=(12, 0), pady=(6, 0))
 
         # Fila 1: Alertas (ancho completo)
         c_alertas = _card(self.detail)
@@ -709,11 +718,21 @@ class HealOpsPanel(ctk.CTk):
             except Exception:
                 tickets = []
 
+            interfaces_host = {}
+            for h in hosts:
+                ifaces = h.get("interfaces", [])
+                if ifaces:
+                    interfaces_host[h["host"]] = {
+                        "ip":   ifaces[0].get("ip", "—"),
+                        "port": ifaces[0].get("port", "—"),
+                    }
+
             self._cache = {
-                "n_reales":     len(reales),
-                "alertas_host": alertas_por_host,
-                "hosts":        hosts,
-                "tickets":      tickets,
+                "n_reales":        len(reales),
+                "alertas_host":    alertas_por_host,
+                "hosts":           hosts,
+                "tickets":         tickets,
+                "interfaces_host": interfaces_host,
             }
             self.after(0, self._aplicar_cache)
 
@@ -724,6 +743,7 @@ class HealOpsPanel(ctk.CTk):
         c = self._cache
         if not c:
             return
+        self._interfaces_host = c.get("interfaces_host", {})
 
         self._alertas_por_host = c["alertas_host"]
 
