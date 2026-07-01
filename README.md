@@ -11,27 +11,31 @@ Proyecto de portfolio para demostrar una pipeline SRE/DevOps real.
 ## Flujo
 
 ```
-Zabbix detecta un problema
+scheduler.py ejecuta el analizador cada 5 minutos
+         │
+         ▼
+Zabbix API → obtiene alertas activas
          │
          ▼
 analizador_alertas.py
-  ├── Pandas filtra severity < 4 → falso positivo (se descarta)
-  └── severity ≥ 4 → alerta real
+  ├── Pandas filtra severity < 4 → falso positivo → log alertas_falsas.log
+  └── severity ≥ 4 → alerta real → log alertas_reales.log
               │
               ▼
-      Ejecuta script Bash de corrección
+      Ejecuta script Bash de corrección en el servidor afectado
               │
         ┌─────┴─────┐
         │           │
        OK         FALLO
         │           │
-    Log OK    Abre ticket en GLPI
+   log OK     Abre ticket en GLPI (solo si no hay uno abierto ya)
               │
               ▼
-   Siguiente ciclo: si la alerta desaparece → cierra el ticket
+   Siguiente ciclo: si la alerta desaparece en Zabbix → cierra el ticket en GLPI
               │
               ▼
-    panel/app.py lo muestra todo en tiempo real
+    panel/app.py muestra alertas, tickets, IP de cada host y logs en tiempo real
+    El técnico puede lanzar correcciones manualmente desde el panel con el botón Corregir
 ```
 
 ---
