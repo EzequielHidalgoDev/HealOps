@@ -4,6 +4,8 @@ Sistema de resolución automática de incidencias de infraestructura. Zabbix det
 
 Proyecto de portfolio para demostrar una pipeline SRE/DevOps real.
 
+![Panel HealOps](img/Programa.png)
+
 ---
 
 ## Flujo
