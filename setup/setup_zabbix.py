@@ -9,7 +9,60 @@ ZABBIX_URL  = os.getenv("ZABBIX_URL",      "http://localhost:8080/api_jsonrpc.ph
 ZABBIX_USER = os.getenv("ZABBIX_USER",     "Admin")
 ZABBIX_PASS = os.getenv("ZABBIX_PASSWORD", "zabbix")
 
-# Triggers a crear por host. Expresiones con avg(,3m) para evitar falsos positivos por picos.
+# value_type: 0=float, 3=unsigned int
+# type: 0=agente Zabbix
+ITEMS = [
+    {
+        "name":       "CPU utilization",
+        "key_":       "system.cpu.util",
+        "value_type": 0,
+        "units":      "%",
+        "delay":      "60s",
+    },
+    {
+        "name":       "CPU load average 1m",
+        "key_":       "system.cpu.load[all,avg1]",
+        "value_type": 0,
+        "units":      "",
+        "delay":      "60s",
+    },
+    {
+        "name":       "Memoria disponible %",
+        "key_":       "vm.memory.size[pavailable]",
+        "value_type": 0,
+        "units":      "%",
+        "delay":      "60s",
+    },
+    {
+        "name":       "Swap libre %",
+        "key_":       "system.swap.size[,pfree]",
+        "value_type": 0,
+        "units":      "%",
+        "delay":      "60s",
+    },
+    {
+        "name":       "Disco raiz usado %",
+        "key_":       "vfs.fs.size[/,pused]",
+        "value_type": 0,
+        "units":      "%",
+        "delay":      "60s",
+    },
+    {
+        "name":       "Procesos zombie",
+        "key_":       "proc.num[,,Z]",
+        "value_type": 3,
+        "units":      "",
+        "delay":      "60s",
+    },
+    {
+        "name":       "SSH disponible",
+        "key_":       "net.tcp.service[ssh]",
+        "value_type": 3,
+        "units":      "",
+        "delay":      "60s",
+    },
+]
+
 # priority: 2=Warning 3=Average 4=High 5=Disaster
 TRIGGERS = [
     {
@@ -113,19 +166,45 @@ def item_existe(token, hostid, key):
     return len(r.json().get("result", [])) > 0
 
 
+def crear_item(token, hostid, item):
+    if item_existe(token, hostid, item["key_"]):
+        print(f"    · item {item['key_']:<40} ya existe — omitido")
+        return
+
+    r = requests.post(ZABBIX_URL, json={
+        "jsonrpc": "2.0", "method": "item.create",
+        "params": {
+            "hostid":     hostid,
+            "name":       item["name"],
+            "key_":       item["key_"],
+            "type":       0,
+            "value_type": item["value_type"],
+            "delay":      item["delay"],
+            "units":      item["units"],
+        },
+        "id": 4
+    }, headers={"Authorization": f"Bearer {token}"})
+
+    resultado = r.json()
+    if "result" in resultado:
+        print(f"    · item {item['key_']:<40} creado OK")
+    else:
+        error = resultado.get("error", {}).get("data", resultado)
+        print(f"    · item {item['key_']:<40} ERROR: {error}")
+
+
 def trigger_existe(token, hostid, descripcion):
     r = requests.post(ZABBIX_URL, json={
         "jsonrpc": "2.0", "method": "trigger.get",
         "params": {"hostids": hostid, "filter": {"description": descripcion}},
-        "id": 4
+        "id": 5
     }, headers={"Authorization": f"Bearer {token}"})
     return len(r.json().get("result", [])) > 0
 
 
 def crear_trigger(token, host, hostid, tpl):
-    # Verificar que el item existe antes de intentar crear el trigger
     if not item_existe(token, hostid, tpl["item_key"]):
-        print(f"    · {tpl['description']:<35} sin item '{tpl['item_key']}' — omitido")
+        print(f"    · {tpl['description']:<35} sin item — omitido")
         return
 
     if trigger_existe(token, hostid, tpl["description"]):
@@ -142,7 +221,7 @@ def crear_trigger(token, host, hostid, tpl):
             "tags":          tpl.get("tags", []),
             "recovery_mode": 0,
         },
-        "id": 5
+        "id": 6
     }, headers={"Authorization": f"Bearer {token}"})
 
     resultado = r.json()
@@ -154,7 +233,7 @@ def crear_trigger(token, host, hostid, tpl):
 
 
 if __name__ == "__main__":
-    print("\n  HealOps — Setup de triggers Zabbix")
+    print("\n  HealOps — Setup de items y triggers Zabbix")
     separador()
 
     token = login()
@@ -165,10 +244,17 @@ if __name__ == "__main__":
         sys.exit(0)
 
     print(f"  Hosts encontrados: {len(hosts)}")
-    separador()
 
     for h in hosts:
         print(f"\n  Host: {h['host']}")
+
+        separador()
+        print("  Items:")
+        for item in ITEMS:
+            crear_item(token, h["hostid"], item)
+
+        separador()
+        print("  Triggers:")
         for tpl in TRIGGERS:
             crear_trigger(token, h["host"], h["hostid"], tpl)
 
