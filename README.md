@@ -179,6 +179,16 @@ GLPI_APP_TOKEN=tu_app_token
 GLPI_USER_TOKEN=tu_user_token
 ```
 
+Puedes copiar `.env.example` como punto de partida:
+```bash
+cp .env.example .env
+```
+
+**Cómo obtener los tokens de GLPI:**
+1. Entra en GLPI → Configuración → General → API
+2. Activa la API REST y copia el **App Token**
+3. Ve a tu perfil de usuario → Ajustes → Token de API → Regenerar y copia el **User Token**
+
 ---
 
 ## Criterio de filtrado
