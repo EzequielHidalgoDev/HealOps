@@ -4,3 +4,4 @@ python-dotenv==1.2.2
 customtkinter==6.0.0
 Pillow==12.2.0
 pyinstaller==6.21.0
+pytest==8.3.5
