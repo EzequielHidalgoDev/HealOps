@@ -59,6 +59,7 @@ analizador_alertas.py
 - Panel con KPIs, lista de hosts, alertas, tickets y historial del corrector
 - `setup/setup_zabbix.py` crea los triggers en todos los hosts con una sola ejecución
 - Rotación de logs automática a 1 MB por archivo
+- 9 tests automatizados con pytest — GitHub Actions los ejecuta en cada push
 
 ---
 
@@ -132,7 +133,13 @@ venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 ```
 
-**4. Crear los triggers en Zabbix**
+**4. Ejecutar los tests**
+
+```bash
+pytest tests/ -v
+```
+
+**5. Crear los triggers en Zabbix**
 
 ```bash
 python setup/setup_zabbix.py
