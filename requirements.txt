@@ -1,0 +1,6 @@
+requests==2.34.2
+pandas==3.0.3
+python-dotenv==1.2.2
+customtkinter==6.0.0
+Pillow==12.2.0
+pyinstaller==6.21.0

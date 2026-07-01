@@ -86,6 +86,7 @@ HealOps/
 ├── img/
 │   └── HealOps Icon.png
 ├── scheduler.py                # Ejecuta el analizador cada 5 minutos en bucle
+├── requirements.txt
 └── .env                        # Credenciales (no se sube al repo)
 ```
 
@@ -126,7 +127,7 @@ docker compose -f docker/docker-compose.yml up -d
 python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # Linux/Mac
-pip install requests pandas python-dotenv customtkinter pillow
+pip install -r requirements.txt
 ```
 
 **4. Crear los triggers en Zabbix**
