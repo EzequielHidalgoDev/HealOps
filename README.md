@@ -85,6 +85,7 @@ HealOps/
 │   └── setup_zabbix.py         # Crea triggers en Zabbix vía API
 ├── img/
 │   └── HealOps Icon.png
+├── scheduler.py                # Ejecuta el analizador cada 5 minutos en bucle
 └── .env                        # Credenciales (no se sube al repo)
 ```
 
@@ -136,19 +137,31 @@ python setup/setup_zabbix.py
 
 Crea 9 triggers (CPU, memoria, disco, swap, carga, SSH, zombies) en todos los hosts. Si el item no existe en el host o el trigger ya está creado, lo salta sin error.
 
-**5. Ejecutar el analizador**
+**5. Lanzar el scheduler**
+
+```bash
+python scheduler.py
+```
+
+Ejecuta el analizador cada 5 minutos en bucle de forma automática. Para correrlo una sola vez:
 
 ```bash
 python monitor/analizador_alertas.py
 ```
 
-Para que funcione de forma automática, se programa con cron (Linux) o Programador de tareas (Windows) cada 5 minutos.
+En producción Linux se puede usar cron en lugar del scheduler:
+
+```
+*/5 * * * * /ruta/venv/bin/python /ruta/monitor/analizador_alertas.py
+```
 
 **6. Abrir el panel**
 
 ```bash
 python panel/app.py
 ```
+
+El panel y el scheduler corren en paralelo en terminales separadas. El panel solo visualiza; el scheduler es quien detecta, corrige y gestiona los tickets.
 
 ---
 
