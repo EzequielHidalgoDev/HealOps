@@ -5,22 +5,30 @@ import sys
 import os
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from gestor_tickets.cliente_glpi import login as glpi_login, crear_ticket, ticket_existe, cerrar_tickets_resueltos, logout
 
-ZABBIX_URL = "http://localhost:8080/api_jsonrpc.php"
-ZABBIX_USER = "Admin"
-ZABBIX_PASSWORD = "zabbix"
+ZABBIX_URL      = os.getenv("ZABBIX_URL",      "http://localhost:8080/api_jsonrpc.php")
+ZABBIX_USER     = os.getenv("ZABBIX_USER",     "Admin")
+ZABBIX_PASSWORD = os.getenv("ZABBIX_PASSWORD", "zabbix")
 
 ACCIONES = {
-    "swap": "find /tmp -type f -delete && echo 'Limpieza de temporales completada'",
-    "cpu":  "top -bn1 | awk 'NR==8{print \"Proceso con mas CPU: \"$12\" (\"$9\"%)\"} END{exit 1}'",
-    "memo": "echo 3 > /proc/sys/vm/drop_caches && echo 'Cache de memoria liberada'"
+    "swap":    "find /tmp -type f -delete && echo 'Limpieza de temporales completada'",
+    "cpu":     "top -bn1 | awk 'NR==8{print \"Proceso con mas CPU: \"$12\" (\"$9\"%)\"} END{exit 1}'",
+    "carga":   "top -bn1 | awk 'NR==8{print \"Proceso con mas CPU: \"$12\" (\"$9\"%)\"} END{exit 1}'",
+    "memo":    "echo 3 > /proc/sys/vm/drop_caches && echo 'Cache de memoria liberada'",
+    "disco":   "find /tmp -type f -mtime +1 -delete && find /var/log -name '*.gz' -delete && echo 'Limpieza de disco completada'",
+    "zombie":  "echo 'Zombies detectados — requiere intervencion manual' && exit 1",
+    "ssh":     "echo 'SSH no responde — requiere intervencion manual' && exit 1",
 }
 
 CONTENEDORES = {
-    "servidor-simulado": "healops-servidor-simulado"
+    "servidor-simulado":  "healops-servidor-simulado",
+    "servidor-ezequiel":  "healops-servidor-ezequiel"
 }
 
 Path("logs").mkdir(exist_ok=True)
@@ -92,11 +100,12 @@ def analizar_alertas(alertas):
         print("  DESCARTADAS (falsos positivos):")
         for _, row in falsos_positivos.iterrows():
             print(f"    · {row['host']:<25} {row['nombre']}")
-            escribir_log("falsos_positivos.log", f"{row['host']} | {row['nombre']}")
+            escribir_log("alertas_falsas.log", f"{row['host']} | {row['nombre']} | severity={row['severity']}")
         separador()
 
     for _, row in df.iterrows():
-        escribir_log("alertas_recibidas.log", f"{row['host']} | {row['nombre']} | severity={row['severity']}")
+        if int(row['severity']) >= 4:
+            escribir_log("alertas_reales.log", f"{row['host']} | {row['nombre']} | severity={row['severity']}")
 
     return alertas_reales
 
@@ -135,19 +144,20 @@ def ejecutar_correccion(host, nombre_alerta):
 
     return resultado.returncode == 0
 
-token = login()
-alertas = obtener_alertas(token)
-alertas_reales = analizar_alertas(alertas)
+if __name__ == "__main__":
+    token = login()
+    alertas = obtener_alertas(token)
+    alertas_reales = analizar_alertas(alertas)
 
-print("  ACCIONES:")
-for _, alerta in alertas_reales.iterrows():
-    ejecutar_correccion(alerta["host"], alerta["nombre"])
+    print("  ACCIONES:")
+    for _, alerta in alertas_reales.iterrows():
+        ejecutar_correccion(alerta["host"], alerta["nombre"])
 
-# Cierra en GLPI los tickets cuya alerta ya no está activa en Zabbix
-nombres_activos = alertas_reales["nombre"].tolist()
-session_glpi = glpi_login()
-cerrar_tickets_resueltos(session_glpi, nombres_activos)
-logout(session_glpi)
+    # Cierra en GLPI los tickets cuya alerta ya no está activa en Zabbix
+    nombres_activos = alertas_reales["nombre"].tolist()
+    session_glpi = glpi_login()
+    cerrar_tickets_resueltos(session_glpi, nombres_activos)
+    logout(session_glpi)
 
-separador()
-print()
+    separador()
+    print()

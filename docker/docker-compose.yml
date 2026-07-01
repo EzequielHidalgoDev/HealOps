@@ -63,6 +63,24 @@ services:
     networks:
       - healops-net
 
+  zabbix-agent-ezequiel:
+    image: zabbix/zabbix-agent:alpine-7.0-latest
+    container_name: healops-servidor-ezequiel
+    environment:
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_HOSTNAME: servidor-ezequiel
+    ports:
+      - "10052:10050"                   # puerto distinto para no colisionar con servidor-simulado
+    volumes:
+      - /:/rootfs:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    privileged: true
+    depends_on:
+      - zabbix-server
+    networks:
+      - healops-net
+
   glpi:
     image: diouxx/glpi                # imagen no oficial pero la más usada para GLPI
     container_name: healops-glpi

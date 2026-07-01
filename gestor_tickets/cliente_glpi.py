@@ -1,6 +1,10 @@
 import requests
+import os
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 Path("logs").mkdir(exist_ok=True)
 
@@ -9,9 +13,9 @@ def escribir_log(mensaje):
     with open("logs/tickets.log", "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {mensaje}\n")
 
-GLPI_URL = "http://localhost:8081/apirest.php"
-APP_TOKEN = "cpr4aL1PV13qAWGvzISbiidaQmlvDufmLZh0OaB1"
-USER_TOKEN = "b87iBzS6fXDbozcXavTtoJVp0UPZ3wSBIZzspryB"
+GLPI_URL   = os.getenv("GLPI_URL",        "http://localhost:8081/apirest.php")
+APP_TOKEN  = os.getenv("GLPI_APP_TOKEN",  "")
+USER_TOKEN = os.getenv("GLPI_USER_TOKEN", "")
 
 # Inicia sesión en GLPI y devuelve el token de sesión
 def login():
@@ -24,7 +28,7 @@ def login():
     )
     return response.json().get("session_token")
 
-# Comprueba si ya existe un ticket abierto para el mismo host y alerta
+# Comprueba si ya existe un ticket ABIERTO para el mismo host y alerta (ignora resueltos/cerrados)
 def ticket_existe(session, host, alerta):
     response = requests.get(
         f"{GLPI_URL}/Ticket",
@@ -32,7 +36,9 @@ def ticket_existe(session, host, alerta):
         params={"searchText[name]": f"[HealOps] Fallo en {host}: {alerta}", "is_deleted": 0}
     )
     resultados = response.json()
-    return isinstance(resultados, list) and len(resultados) > 0
+    if not isinstance(resultados, list):
+        return False
+    return any(int(t.get("status", 1)) not in (5, 6) for t in resultados)
 
 # Abre un ticket en GLPI con el host y la alerta que falló
 def crear_ticket(session, host, alerta):
@@ -62,15 +68,17 @@ def crear_ticket(session, host, alerta):
         escribir_log(f"ERROR | {host} | {alerta}")
     return ticket_id
 
-# Obtiene todos los tickets abiertos de HealOps en GLPI
+# Obtiene tickets de HealOps que NO están cerrados (status 5=Resuelto, 6=Cerrado)
 def obtener_tickets_abiertos(session):
     response = requests.get(
         f"{GLPI_URL}/Ticket",
         headers={"App-Token": APP_TOKEN, "Session-Token": session},
-        params={"searchText[name]": "[HealOps]", "filter[status]": 1, "is_deleted": 0}
+        params={"searchText[name]": "[HealOps]", "is_deleted": 0}
     )
     resultados = response.json()
-    return resultados if isinstance(resultados, list) else []
+    if not isinstance(resultados, list):
+        return []
+    return [t for t in resultados if int(t.get("status", 1)) not in (5, 6)]
 
 # Cierra un ticket en GLPI marcándolo como resuelto
 def cerrar_ticket(session, ticket_id):
